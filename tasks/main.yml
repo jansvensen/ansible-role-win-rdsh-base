@@ -1,0 +1,53 @@
+---
+# tasks file for ansible-role-win-rdsh
+
+- name: Windows Feature RDS-Licensing
+  win_feature:
+    name: RDS-Licensing
+    include_management_tools: yes
+    state: present
+  register: rds_lic_feature
+  when: 
+    - install_rds_licensing
+
+- name: REGEDIT - User based RDS-Licensing
+  win_regedit:
+    path: HKLM:\Software\Policies\Microsoft\Windows NT\Terminal Services
+    name: LicensingMode
+    data: '{{ rds_licensing_mode }}'
+    type: dword
+  when:
+    - rds_licensing_set_policy
+
+- name: reboot if RDS-Licensing feature requires it
+  win_reboot:
+  when:
+    - install_rds_licensing 
+    - rds_lic_feature.reboot_required|default(false)
+
+- name: Windows Feature RDSH
+  win_feature:
+    name: RDS-RD-Server
+    state: present
+    include_sub_features: yes
+    include_management_tools: yes
+  register: rdsh_feature
+
+- name: REGEDIT - LicenseServer name
+  win_regedit:
+    path: HKLM:\Software\Policies\Microsoft\Windows NT\Terminal Services
+    name: LicenseServers
+    data: '{{ rds_licensing_server_name }}'
+    type: string
+  when:
+    - rds_licensing_set_policy
+
+- name: reboot if RDSH feature requires it
+  win_reboot:
+  when: rdsh_feature.reboot_required|default(false)
+
+- name: RDSH - Local Group Remote Desktop Users
+  win_group_membership:
+    name: '{{ remotedesktopuser_group_name }}'
+    members: '{{ members_of_remotedesktopuser }}'
+    state: present
